@@ -1,5 +1,6 @@
 # symbol-hooker
 ```bash
+$ export LD_LIBRARY_PATH=./bin:D_LIBRARY_PATH
 $ make clean
 $ make
 # Open two terminals
@@ -15,3 +16,10 @@ $ make got
 $ sudo su
 $ make got
 ```
+
+## Normal case
+![](./assets/normal.png?raw=true)
+
+
+## GOT Hooked
+![](./assets/got_hooked.png?raw=true)
