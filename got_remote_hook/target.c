@@ -24,5 +24,5 @@ int main() {
 	printf("After GOT Hook: y = fake_foo(1, 2) = %d\n", y);
 	printf("After GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", GLOBAL_SYMBOL_IN_TARGET);
 
-    return 0;
+	return 0;
 }

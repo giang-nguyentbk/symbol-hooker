@@ -11,16 +11,16 @@
 #include <time.h>
 
 #define START_BENCHMARK(start) \
-    struct timespec start; \
-    clock_gettime(CLOCK_MONOTONIC, &start)
+struct timespec start; \
+clock_gettime(CLOCK_MONOTONIC, &start)
 
 #define END_BENCHMARK(start, end, duration) \
-    struct timespec end; \
-    clock_gettime(CLOCK_MONOTONIC, &end); \
-    long duration = ((end.tv_sec - start.tv_sec) * 1e9) + (end.tv_nsec - start.tv_nsec)
+struct timespec end; \
+clock_gettime(CLOCK_MONOTONIC, &end); \
+long duration = ((end.tv_sec - start.tv_sec) * 1e9) + (end.tv_nsec - start.tv_nsec)
 
 #define PRINT_BENCHMARK(duration, label) \
-    printf("[BENCHMARK] %s took %ld ns\n", label, duration)
+printf("[BENCHMARK] %s took %ld ns\n", label, duration)
 
 
 __attribute__((visibility("hidden")))
@@ -57,7 +57,7 @@ void printf_symbol(void *handle, unsigned long elf_base_addr, const char *symbol
 	START_BENCHMARK(start);
 	unsigned long symbol_offset = get_symbol_offset(handle, symbol);
 	END_BENCHMARK(start, end, duration);
-    PRINT_BENCHMARK(duration, "get_symbol_offset");
+PRINT_BENCHMARK(duration, "get_symbol_offset");
 	
 	if(symbol_offset) {
 		printf("%s: Symbol \'%s\' has offset = %p, absolute address = %p\n", get_elf_name(handle), symbol, symbol_offset, elf_base_addr + symbol_offset);
