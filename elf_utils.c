@@ -75,7 +75,7 @@ typedef struct ElfInformation {
 	Elf_Off dynsym_section_offset_from_memory_base;
 	Elf_Off dynstr_section_offset_from_memory_base;
 	Elf_Off rela_dyn_section_offset_from_memory_base;
-    Elf_Off rela_plt_section_offset_from_memory_base;
+	Elf_Off rela_plt_section_offset_from_memory_base;
 
 	Elf_Off rela_dyn_section_offset_from_elf_file;
 	Elf_Off rela_plt_section_offset_from_elf_file;
@@ -314,13 +314,13 @@ PUBLIC void *load_elf_to_memory(const char *path) {
 
 PUBLIC void unload_elf_from_memory(void *handle) {
 	ElfInformation *ptr = (ElfInformation *)handle;
-    free(ptr->symbol_table);
-    free(ptr->gnuhash_start_addr);
-    free(ptr->dynsym_start_addr);
-    free(ptr->dynstr_start_addr);
-    free(ptr->rela_dyn_start_addr);
-    free(ptr->rela_plt_start_addr);
-    free(ptr->name);
+	free(ptr->symbol_table);
+	free(ptr->gnuhash_start_addr);
+	free(ptr->dynsym_start_addr);
+	free(ptr->dynstr_start_addr);
+	free(ptr->rela_dyn_start_addr);
+	free(ptr->rela_plt_start_addr);
+	free(ptr->name);
 	free(handle);
 }
 
@@ -415,22 +415,22 @@ PUBLIC unsigned long get_section_memory_offset(void *handle, const char *section
 }
 
 PUBLIC unsigned long get_section_file_offset(void *handle, const char *section) {
-    ElfInformation *ptr = (ElfInformation *)handle;
-    if(strcmp(section, ".rela.dyn") == 0) {
-        return ptr->rela_dyn_section_offset_from_elf_file;
-    } else if(strcmp(section, ".rela.plt") == 0) {
-        return ptr->rela_plt_section_offset_from_elf_file;
-    } else if(strcmp(section, ".dynsym") == 0) {
-        return ptr->dynsym_section_offset_from_elf_file;
-    } else if(strcmp(section, ".dynstr") == 0) {
-        return ptr->dynstr_section_offset_from_elf_file;
-    } else if(strcmp(section, ".symtab") == 0) {
-        return ptr->symtab_section_offset_from_elf_file;
-    } else if(strcmp(section, ".strtab") == 0) {
-        return ptr->strtab_section_offset_from_elf_file;
-    } else {
-        return 0;
-    }
+	ElfInformation *ptr = (ElfInformation *)handle;
+	if(strcmp(section, ".rela.dyn") == 0) {
+		return ptr->rela_dyn_section_offset_from_elf_file;
+	} else if(strcmp(section, ".rela.plt") == 0) {
+		return ptr->rela_plt_section_offset_from_elf_file;
+	} else if(strcmp(section, ".dynsym") == 0) {
+		return ptr->dynsym_section_offset_from_elf_file;
+	} else if(strcmp(section, ".dynstr") == 0) {
+		return ptr->dynstr_section_offset_from_elf_file;
+	} else if(strcmp(section, ".symtab") == 0) {
+		return ptr->symtab_section_offset_from_elf_file;
+	} else if(strcmp(section, ".strtab") == 0) {
+		return ptr->strtab_section_offset_from_elf_file;
+	} else {
+		return 0;
+	}
 }
 
 PUBLIC unsigned long get_section_num_of_entries(void *handle, const char *section) {
@@ -598,16 +598,16 @@ PUBLIC unsigned long get_got_plt_entry_offset(void *handle, const char *symbol) 
 }
 
 PUBLIC int is_full_relro_enabled(void *handle) {
-    ElfInformation *ptr = (ElfInformation *)handle;
-    Elf_Dyn *dynsym = ptr->dynsym_start_addr;
+	ElfInformation *ptr = (ElfInformation *)handle;
+	Elf_Dyn *dynsym = ptr->dynsym_start_addr;
 
-    for(int i = 0; i < ptr->dynsym_section_num_entries; ++i) {
-        if(dynsym[i].d_tag == DT_BIND_NOW ||
-        (dynsym[i].d_tag == DT_FLAGS && dynsym[i].d_un.d_val == DT_BIND_NOW) ||
-        (dynsym[i].d_tag == DT_FLAGS_1 && dynsym[i].d_un.d_val == DF_1_NOW)) {
-            return IS_FULL_RELRO;
-        }
-    }
+	for(int i = 0; i < ptr->dynsym_section_num_entries; ++i) {
+		if(dynsym[i].d_tag == DT_BIND_NOW ||
+		(dynsym[i].d_tag == DT_FLAGS && dynsym[i].d_un.d_val == DT_BIND_NOW) ||
+		(dynsym[i].d_tag == DT_FLAGS_1 && dynsym[i].d_un.d_val == DF_1_NOW)) {
+			return IS_FULL_RELRO;
+		}
+	}
 
-    return IS_NO_RELRO;
+	return IS_NO_RELRO;
 }

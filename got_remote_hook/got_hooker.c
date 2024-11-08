@@ -60,10 +60,10 @@ void perform_got_hook(int pid, const char *target_elf, const char *libfoo_elf) {
 	unsigned long foo_got_plt_entry_offset = get_got_plt_entry_offset(target_elf_handle, "foo");
 	unsigned long *foo_got_plt_entry_abs_address = (unsigned long*)(target_elf_base_addr + foo_got_plt_entry_offset);
 	if(foo_got_plt_entry_offset == 0 || fake_foo_offset == 0) {
-        printf("GOT Hook: Could not find .got.plt entry of \'foo\' or symbol \'fake_foo\' in ELF \'%s\'\n", libfoo_elf);
-    } else {
-        ptrace_wrapper_write(pid, (uint8_t *)foo_got_plt_entry_abs_address, (uint8_t *)&fake_foo_abs_address, sizeof(fake_foo_abs_address));
-    }
+		printf("GOT Hook: Could not find .got.plt entry of \'foo\' or symbol \'fake_foo\' in ELF \'%s\'\n", libfoo_elf);
+	} else {
+		ptrace_wrapper_write(pid, (uint8_t *)foo_got_plt_entry_abs_address, (uint8_t *)&fake_foo_abs_address, sizeof(fake_foo_abs_address));
+	}
 
 
 
@@ -75,16 +75,16 @@ void perform_got_hook(int pid, const char *target_elf, const char *libfoo_elf) {
 	unsigned long global_val_in_target_abs_address = target_elf_base_addr + global_val_in_target_offset;
 
 	unsigned long fake_global_variable = 111;
-    if(global_val_in_libfoo_offset == 0) {
-        printf("GOT Hook: Could not find symbol \'GLOBAL_SYMBOL_IN_LIBFOO\' in ELF \'%s\'\n", libfoo_elf);
-    } else {
-        ptrace_wrapper_write(pid, (uint8_t *)global_val_in_libfoo_abs_address, (uint8_t *)&fake_global_variable, sizeof(fake_global_variable));
-    }
-    if(global_val_in_target_offset == 0) {
-        printf("GOT Hook: Could not find symbol \'GLOBAL_SYMBOL_IN_TARGET\' in ELF \'%s\'\n", target_elf);
-    } else {
-        ptrace_wrapper_write(pid, (uint8_t *)global_val_in_target_abs_address, (uint8_t *)&fake_global_variable, sizeof(fake_global_variable));
-    }
+	if(global_val_in_libfoo_offset == 0) {
+		printf("GOT Hook: Could not find symbol \'GLOBAL_SYMBOL_IN_LIBFOO\' in ELF \'%s\'\n", libfoo_elf);
+	} else {
+		ptrace_wrapper_write(pid, (uint8_t *)global_val_in_libfoo_abs_address, (uint8_t *)&fake_global_variable, sizeof(fake_global_variable));
+	}
+	if(global_val_in_target_offset == 0) {
+		printf("GOT Hook: Could not find symbol \'GLOBAL_SYMBOL_IN_TARGET\' in ELF \'%s\'\n", target_elf);
+	} else {
+		ptrace_wrapper_write(pid, (uint8_t *)global_val_in_target_abs_address, (uint8_t *)&fake_global_variable, sizeof(fake_global_variable));
+	}
 
 	ptrace_wrapper_detach(pid);
 	unload_elf_from_memory(libfoo_elf_handle);

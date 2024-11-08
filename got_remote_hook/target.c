@@ -47,19 +47,19 @@ DlFixupFuncPtr scan_dl_runtime_resolve_text_segment_aarch64(unsigned long dl_run
 }
 
 DlFixupFuncPtr find_dl_fixup() {
-    FILE *f = fopen("/proc/self/maps", "r");
-    if(f == NULL) {
+	FILE *f = fopen("/proc/self/maps", "r");
+	if(f == NULL) {
 		printf("Failed to open /proc/self/maps in find_dl_fixup!\n");
-        return NULL;
-    }
+		return NULL;
+	}
 
-    char line[512] = {0};
+	char line[512] = {0};
 	char prev_path[151] = {0}, path[151] = {0}, perm[5] = {0};
 	unsigned long s = 0, e = 0;
-    while(fgets(line, sizeof(line), f)) {
-        sscanf(line, "%lx-%lx %4s %*x %*x:%*x %*d %150s", &s, &e, perm, path);
-        if(strchr(path, '/') != NULL && strcmp(prev_path, path) != 0) {
-            void *handle = load_elf_to_memory(path);
+	while(fgets(line, sizeof(line), f)) {
+		sscanf(line, "%lx-%lx %4s %*x %*x:%*x %*d %150s", &s, &e, perm, path);
+		if(strchr(path, '/') != NULL && strcmp(prev_path, path) != 0) {
+			void *handle = load_elf_to_memory(path);
 			int relro = is_full_relro_enabled(handle);
 			if(relro == IS_NO_RELRO) {
 				// Try to retrieve _dl_runtime_resolve
@@ -77,28 +77,28 @@ DlFixupFuncPtr find_dl_fixup() {
 			}
 			unload_elf_from_memory(handle);
 			strcpy(prev_path, path);
-        }
-    }
+		}
+	}
 
 	printf("Could not find _dl_fixup in /proc/self/maps!\n");
-    fclose(f);
+	fclose(f);
 	return NULL;
 }
 
 struct link_map *find_link_map(const char *target_elf, const char *symbol) {
-    FILE *f = fopen("/proc/self/maps", "r");
-    if(f == NULL) {
+	FILE *f = fopen("/proc/self/maps", "r");
+	if(f == NULL) {
 		printf("Failed to open /proc/self/maps in find_link_map!\n");
-        return NULL;
-    }
+		return NULL;
+	}
 
 	struct link_map *lm;
-    char line[512] = {0};
+	char line[512] = {0};
 	char prev_path[151] = {0}, path[151] = {0}, perm[5] = {0};
 	unsigned long s, e;
-    while(fgets(line, sizeof(line), f)) {
-        sscanf(line, "%lx-%lx %4s %*x %*x:%*x %*d %150s", &s, &e, perm, path);
-        if(strchr(path, '/') != NULL && strcmp(prev_path, path) != 0 && strstr(path, target_elf) != NULL) {
+	while(fgets(line, sizeof(line), f)) {
+		sscanf(line, "%lx-%lx %4s %*x %*x:%*x %*d %150s", &s, &e, perm, path);
+		if(strchr(path, '/') != NULL && strcmp(prev_path, path) != 0 && strstr(path, target_elf) != NULL) {
 			Dl_info info = {0};
 			int ret = dladdr1((void *)s + 100, &info, (void **)&lm, RTLD_DL_LINKMAP);
 			if(ret) {
@@ -106,11 +106,11 @@ struct link_map *find_link_map(const char *target_elf, const char *symbol) {
 				return lm;
 			}
 			strcpy(prev_path, path);
-        }
-    }
+		}
+	}
 
 	printf("Could not find ELF %s in /proc/self/maps!\n", target_elf);
-    fclose(f);
+	fclose(f);
 	return NULL;
 }
 
@@ -209,12 +209,12 @@ unsigned long *get_GLOBAL_SYMBOL_IN_TARGET() {
 
 
 int main() {
-    printf("\n========================================\n");
+	printf("\n========================================\n");
 	int x = foo(1, 2);
 	int y = fake_foo(1, 2);
 	printf("Before GOT Hook: x = foo(1, 2) = %d\n", x);
 	printf("Before GOT Hook: y = fake_foo(1, 2) = %d\n", y);
-    printf("Before GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
+	printf("Before GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
 	printf("========================================\n\n");
 	
 	// PRINT_GOT_PLT_ENTRIES;
@@ -222,14 +222,14 @@ int main() {
 	printf("\n========================================\n");
 	printf("Waiting for GOT Hook from attacker...\n");
 	printf("========================================\n\n");
-    getchar();
+	getchar();
 	
 	printf("\n========================================\n");
 	x = foo(1, 2);
 	y = fake_foo(1, 2);
 	printf("After GOT Hook: x = foo(1, 2) = %d\n", x);
 	printf("After GOT Hook: y = fake_foo(1, 2) = %d\n", y);
-    printf("After GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
+	printf("After GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
 	printf("========================================\n\n");
 
 	// PRINT_GOT_PLT_ENTRIES;
@@ -237,7 +237,7 @@ int main() {
 	printf("\n========================================\n");
 	printf("Running GOT Hook detection...\n");
 	printf("========================================\n\n");
-    getchar();
+	getchar();
 
 	printf("\n========================================\n");
 	START_BENCHMARK(start);
@@ -246,5 +246,5 @@ int main() {
 	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection");
 	printf("========================================\n\n");
 
-    return 0;
+	return 0;
 }
