@@ -6,13 +6,13 @@ RELRO_FLAGS = -Wl,-z,norelro
 OPTIMIZED_FLAGS = -O0
 WARNING_FLAGS = -w
 # NO_STRIPPING_SYMBOLS = -Wl,--whole-archive
-DEBUG_INFO = -g
+# DEBUG_INFO = -g
 # STACK_PROTECTION = -z execstack
-STACK_PROTECTION = -z noexecstack
+# STACK_PROTECTION = -z noexecstack
 
 CCFLAGS = $(OPTIMIZED_FLAGS) $(WARNING_FLAGS) $(RELRO_FLAGS) $(NO_STRIPPING_SYMBOLS) $(DEBUG_INFO) $(STACK_PROTECTION)
 
-all: create_bin libfoo main targetexe got_hooker
+all: create_bin libfoo main targetexe got_hooker relro_mode
 
 create_bin:
 	@mkdir -p $(BIN)
@@ -32,7 +32,7 @@ $(BIN)/ptrace_wrapper.o:
 main: main.c $(BIN)/elf_utils.o
 	gcc $^ $(CCFLAGS) -L$(BIN) -llibfoo -o $(BIN)/main
 
-targetexe: got_remote_hook/target.c
+targetexe: got_remote_hook/target.c $(BIN)/elf_utils.o
 	gcc $^ $(CCFLAGS) -L$(BIN) -llibfoo -o $(BIN)/target
 
 got_hooker: got_remote_hook/got_hooker.c $(BIN)/elf_utils.o $(BIN)/ptrace_wrapper.o
@@ -47,6 +47,12 @@ target:
 
 got:
 	@$(BIN)/got_hooker
+
+relro_mode: relro_mode.c $(BIN)/elf_utils.o
+	gcc $^ $(CCFLAGS) -o $(BIN)/relro_mode
+
+rr:
+	@$(BIN)/relro_mode
 
 # $(BIN)/libfoo_static.o: libfoo.c
 # 	gcc libfoo.c -c $(CCFLAGS) -o $@

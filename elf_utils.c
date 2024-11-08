@@ -21,15 +21,7 @@
 #define Elf_Sym ElfW(Sym)
 #define Elf_Rela ElfW(Rela)
 
-#ifdef __LP64__
-#define ELF_ST_TYPE ELF64_ST_TYPE
-#define ELF_R_TYPE ELF64_R_TYPE
-#define ELF_R_SYM ELF64_R_SYM
-#else
-#define ELF_ST_TYPE ELF32_ST_TYPE
-#define ELF_R_TYPE ELF32_R_TYPE
-#define ELF_R_SYM ELF32_R_SYM
-#endif
+#define ELFW(type)	_ElfW (ELF, __ELF_NATIVE_CLASS, type)
 
 // Define platform-specific relocation types
 #if defined(__aarch64__)
@@ -82,6 +74,9 @@ typedef struct ElfInformation {
 	Elf_Off dynamic_section_offset_from_memory_base;
 	Elf_Off dynsym_section_offset_from_memory_base;
 	Elf_Off dynstr_section_offset_from_memory_base;
+	Elf_Off rela_dyn_section_offset_from_memory_base;
+    Elf_Off rela_plt_section_offset_from_memory_base;
+
 	Elf_Off rela_dyn_section_offset_from_elf_file;
 	Elf_Off rela_plt_section_offset_from_elf_file;
 	Elf_Off dynsym_section_offset_from_elf_file;
@@ -96,6 +91,8 @@ typedef struct ElfInformation {
 	Elf_Xword symtab_section_num_entries;
 	Elf_Xword rela_dyn_section_num_entries;
 	Elf_Xword rela_plt_section_num_entries;
+
+	Elf_Xword got_section_entry_size;
 
 	Elf_Xword text_section_size;
 	Elf_Xword plt_section_size;
@@ -139,7 +136,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 
 	int symbol_count = 0;
 	for(int i = 0; i < handle->symtab_section_num_entries; ++i) {
-		Elf_Half symbol_type = ELF_ST_TYPE(symtab_entries[i].st_info);
+		Elf_Half symbol_type = ELFW(ST_TYPE)(symtab_entries[i].st_info);
 		if(symtab_entries[i].st_name != 0 && symtab_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && symtab_entries[i].st_size)) {
 			++symbol_count;
 		}
@@ -149,7 +146,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 	Elf_Sym *dynsym_entries = (Elf_Sym *)(handle->mmap_addr + handle->dynsym_section_offset_from_elf_file);
 
 	for(int i = 0; i < handle->dynsym_section_num_entries; ++i) {
-		Elf_Half symbol_type = ELF_ST_TYPE(dynsym_entries[i].st_info);
+		Elf_Half symbol_type = ELFW(ST_TYPE)(dynsym_entries[i].st_info);
 		if(dynsym_entries[i].st_name != 0 && dynsym_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && dynsym_entries[i].st_size)) {
 			++symbol_count;
 		}
@@ -159,7 +156,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 	memset(handle->symbol_table, 0, symbol_count * sizeof(SymbolInformation));
 
 	for(int i = 0; i < handle->symtab_section_num_entries; ++i) {
-		Elf_Half symbol_type = ELF_ST_TYPE(symtab_entries[i].st_info);
+		Elf_Half symbol_type = ELFW(ST_TYPE)(symtab_entries[i].st_info);
 		if(symtab_entries[i].st_name != 0 && symtab_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && symtab_entries[i].st_size)) {
 			char *symbol_name = strtab_ptr + symtab_entries[i].st_name;
 			// printf("Symbol: .symtab %d: \'%s\'\n", i, symbol_name);
@@ -171,7 +168,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 	}
 
 	for(int i = 0; i < handle->dynsym_section_num_entries; ++i) {
-		Elf_Half symbol_type = ELF_ST_TYPE(dynsym_entries[i].st_info);
+		Elf_Half symbol_type = ELFW(ST_TYPE)(dynsym_entries[i].st_info);
 		if(dynsym_entries[i].st_name != 0 && dynsym_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && dynsym_entries[i].st_size)) {
 			char *symbol_name = dynstr_ptr + dynsym_entries[i].st_name;
 			// printf("Symbol: .dynsym %d: \'%s\'\n", i, symbol_name);
@@ -196,11 +193,11 @@ PRIVATE void save_section_information_private(ElfInformation *handle) {
 		Elf_Addr offset_from_elf_file           = handle->shdr[i].sh_offset;
 		Elf_Xword section_size                  = handle->shdr[i].sh_size;
 		const char *section_name                = shstrtab_ptr + handle->shdr[i].sh_name;
-	Elf_Xword section_num_entries   	= 0;
-	if(*section_name == '\0') continue;
-	if(handle->shdr[i].sh_entsize > 0) {
-		section_num_entries  	 	= section_size / handle->shdr[i].sh_entsize;
-	}
+		Elf_Xword section_num_entries   	= 0;
+		if(*section_name == '\0') continue;
+		if(handle->shdr[i].sh_entsize > 0) {
+			section_num_entries  	 	= section_size / handle->shdr[i].sh_entsize;
+		}
 
 		if(strcmp(section_name, ".text") == 0) {
 			handle->text_section_offset_from_memory_base = offset_from_memory_base;
@@ -212,6 +209,7 @@ PRIVATE void save_section_information_private(ElfInformation *handle) {
 			handle->got_section_offset_from_memory_base = offset_from_memory_base;
 			handle->got_section_num_entries = section_num_entries;
 			handle->got_section_size = section_size;
+			handle->got_section_entry_size = handle->shdr[i].sh_entsize;
 		} else if(strcmp(section_name, ".got.plt") == 0) {
 			handle->got_plt_section_offset_from_memory_base = offset_from_memory_base;
 			handle->got_plt_section_num_entries = section_num_entries;
@@ -254,12 +252,14 @@ PRIVATE void save_section_information_private(ElfInformation *handle) {
 			handle->gnu_chain = (uint32_t *)(handle->gnu_bucket + handle->gnu_bucket_count - handle->gnu_symbol_index);
 		} else if(strcmp(section_name, ".rela.dyn") == 0) {
 			handle->rela_dyn_section_offset_from_elf_file = offset_from_elf_file;
+			handle->rela_dyn_section_offset_from_memory_base = offset_from_memory_base;
 			handle->rela_dyn_section_size = section_size;
 			handle->rela_dyn_section_num_entries = section_num_entries;
 			handle->rela_dyn_start_addr = (Elf_Rela *)malloc(section_size);
 			memcpy(handle->rela_dyn_start_addr, handle->mmap_addr + offset_from_elf_file, section_size);
 		} else if(strcmp(section_name, ".rela.plt") == 0) {
 			handle->rela_plt_section_offset_from_elf_file = offset_from_elf_file;
+			handle->rela_plt_section_offset_from_memory_base = offset_from_memory_base;
 			handle->rela_plt_section_size = section_size;
 			handle->rela_plt_section_num_entries = section_num_entries;
 			handle->rela_plt_start_addr = (Elf_Rela *)malloc(section_size);
@@ -313,13 +313,14 @@ PUBLIC void *load_elf_to_memory(const char *path) {
 }
 
 PUBLIC void unload_elf_from_memory(void *handle) {
-	free(((ElfInformation *)handle)->symbol_table);
-	free(((ElfInformation *)handle)->gnuhash_start_addr);
-	free(((ElfInformation *)handle)->dynsym_start_addr);
-	free(((ElfInformation *)handle)->dynstr_start_addr);
-	free(((ElfInformation *)handle)->rela_dyn_start_addr);
-	free(((ElfInformation *)handle)->rela_plt_start_addr);
-	free(((ElfInformation *)handle)->name);
+	ElfInformation *ptr = (ElfInformation *)handle;
+    free(ptr->symbol_table);
+    free(ptr->gnuhash_start_addr);
+    free(ptr->dynsym_start_addr);
+    free(ptr->dynstr_start_addr);
+    free(ptr->rela_dyn_start_addr);
+    free(ptr->rela_plt_start_addr);
+    free(ptr->name);
 	free(handle);
 }
 
@@ -355,7 +356,7 @@ PUBLIC void print_elf_header(void *handle) {
 	printf("  Section header string table index:  %d\n", elf_header->e_shstrndx);
 }
 
-PUBLIC unsigned long get_elf_base_address_on_memory(int pid, const char *elf_name) {
+PUBLIC unsigned long get_load_module_base_address(int pid, const char *elf_name) {
 	char proc_pid_maps[64] = {0};
 	if(pid == PID_SELF) {
 		strcpy(proc_pid_maps, "/proc/self/maps");
@@ -390,7 +391,7 @@ PUBLIC unsigned long get_start_of_section_header_offset(void *handle){
 	return ((Elf_Ehdr *)handle)->e_shoff;
 }
 
-PUBLIC unsigned long get_section_offset(void *handle, const char *section) {
+PUBLIC unsigned long get_section_memory_offset(void *handle, const char *section) {
 	ElfInformation *ptr = (ElfInformation *)handle;
 	if(strcmp(section, ".text") == 0) {
 		return ptr->text_section_offset_from_memory_base;
@@ -411,6 +412,25 @@ PUBLIC unsigned long get_section_offset(void *handle, const char *section) {
 	} else {
 		return 0;
 	}
+}
+
+PUBLIC unsigned long get_section_file_offset(void *handle, const char *section) {
+    ElfInformation *ptr = (ElfInformation *)handle;
+    if(strcmp(section, ".rela.dyn") == 0) {
+        return ptr->rela_dyn_section_offset_from_elf_file;
+    } else if(strcmp(section, ".rela.plt") == 0) {
+        return ptr->rela_plt_section_offset_from_elf_file;
+    } else if(strcmp(section, ".dynsym") == 0) {
+        return ptr->dynsym_section_offset_from_elf_file;
+    } else if(strcmp(section, ".dynstr") == 0) {
+        return ptr->dynstr_section_offset_from_elf_file;
+    } else if(strcmp(section, ".symtab") == 0) {
+        return ptr->symtab_section_offset_from_elf_file;
+    } else if(strcmp(section, ".strtab") == 0) {
+        return ptr->strtab_section_offset_from_elf_file;
+    } else {
+        return 0;
+    }
 }
 
 PUBLIC unsigned long get_section_num_of_entries(void *handle, const char *section) {
@@ -451,14 +471,14 @@ PUBLIC unsigned long get_section_size(void *handle, const char *section) {
 	}
 }
 
-PUBLIC void inspect_dynamic_section(void *handle, unsigned long elf_base_addr) {
+PUBLIC void inspect_dynamic_section(void *handle, unsigned long module_base_addr) {
 	ElfInformation *ptr = (ElfInformation *)handle;
-	for (Elf_Dyn *entry = (Elf_Dyn *)(elf_base_addr + ptr->dynamic_section_offset_from_memory_base); entry->d_tag != DT_NULL; entry++) {
+	for (Elf_Dyn *entry = (Elf_Dyn *)(module_base_addr + ptr->dynamic_section_offset_from_memory_base); entry->d_tag != DT_NULL; entry++) {
 		switch (entry->d_tag) {
 			case DT_NEEDED:
 				printf("Shared library needed (DT_NEEDED): %lu\n", entry->d_un.d_val);
-				unsigned long dynstr_offset = get_section_offset(handle, ".dynstr");
-				const char *dynstr_addr = (const char *)(elf_base_addr + dynstr_offset);
+				unsigned long dynstr_offset = get_section_memory_offset(handle, ".dynstr");
+				const char *dynstr_addr = (const char *)(module_base_addr + dynstr_offset);
 				printf("Retrieve symbol from .dynstr: %s\n", dynstr_addr + entry->d_un.d_val);
 				break;
 			case DT_STRTAB:
@@ -480,7 +500,7 @@ PUBLIC void inspect_dynamic_section(void *handle, unsigned long elf_base_addr) {
 	}
 }
 
-PRIVATE unsigned long get_symbol_offset_via_linear_lookup_private(void *handle, const char *symbol) {
+PRIVATE unsigned long get_symbol_memory_offset_via_linear_lookup_private(void *handle, const char *symbol) {
 	ElfInformation *ptr = (ElfInformation *)handle;
 	for(int i = 0; i < ptr->symbol_table_size; ++i) {
 		// printf("Symbol: %s = %p\n", ptr->symbol_table[i].name, ptr->symbol_table[i].offset);
@@ -500,7 +520,7 @@ PRIVATE uint32_t gnu_hash(const char *symbol) {
 	return hash;
 }
 
-PRIVATE unsigned long get_symbol_offset_via_gnu_hash_lookup_private(void *handle, const char *symbol) {
+PRIVATE unsigned long get_symbol_memory_offset_via_gnu_hash_lookup_private(void *handle, const char *symbol) {
 	ElfInformation *ptr = (ElfInformation *)handle;
 	if (ptr->gnu_bucket_count == 0 || ptr->gnu_bloom_filter_size == 0) return 0;
 
@@ -514,9 +534,6 @@ PRIVATE unsigned long get_symbol_offset_via_gnu_hash_lookup_private(void *handle
 			char *dynstr_ptr = ptr->dynstr_start_addr;
 			do {
 				Elf_Sym *dynsym_entries = ptr->dynsym_start_addr;
-				// printf("[ETRUGIA] symbol %s: ptr->gnu_chain[symbol_index] = %p\n", symbol, ptr->gnu_chain[symbol_index]);
-				// printf("[ETRUGIA] symbol %s: hash = %p\n", symbol, hash);
-				// printf("[ETRUGIA] symbol %s: symbol_index = %p\n", symbol, symbol_index);
 				if ((ptr->gnu_chain[symbol_index] ^ hash) >> 1 == 0
 					&& strcmp(dynstr_ptr + dynsym_entries[symbol_index].st_name, symbol) == 0) {
 					return dynsym_entries[symbol_index].st_value;
@@ -527,17 +544,17 @@ PRIVATE unsigned long get_symbol_offset_via_gnu_hash_lookup_private(void *handle
 	return 0;
 }
 
-PUBLIC unsigned long get_symbol_offset(void *handle, const char *symbol) {
-	printf("Trying to find offset of symbol %s\n", symbol);
+PUBLIC unsigned long get_symbol_memory_offset(void *handle, const char *symbol) {
+	// printf("Trying to find offset of symbol %s\n", symbol);
 	unsigned long symbol_offset = 0;
 
-	symbol_offset = get_symbol_offset_via_gnu_hash_lookup_private(handle, symbol);
+	symbol_offset = get_symbol_memory_offset_via_gnu_hash_lookup_private(handle, symbol);
 	if(symbol_offset > 0) {
 		printf("Found symbol offset via GNU Hash Lookup: %s = %p\n", symbol, symbol_offset);
 		return symbol_offset;
 	}
 
-	symbol_offset = get_symbol_offset_via_linear_lookup_private(handle, symbol);
+	symbol_offset = get_symbol_memory_offset_via_linear_lookup_private(handle, symbol);
 	if(symbol_offset > 0) {
 		printf("Found symbol offset via Linear Lookup: %s = %p\n", symbol, symbol_offset);
 		return symbol_offset;
@@ -550,8 +567,8 @@ PUBLIC unsigned long get_got_entry_offset(void *handle, const char *symbol) {
 	ElfInformation *ptr = (ElfInformation *)handle;
 	Elf_Rela *rela_dyn_entries = ptr->rela_dyn_start_addr;
 	for(Elf_Xword i = 0; i < ptr->rela_dyn_section_num_entries; ++i) {
-		uint32_t type = ELF_R_TYPE(rela_dyn_entries[i].r_info);
-		uint32_t symbol_index = ELF_R_SYM(rela_dyn_entries[i].r_info);
+		uint32_t type = ELFW(R_TYPE)(rela_dyn_entries[i].r_info);
+		uint32_t symbol_index = ELFW(R_SYM)(rela_dyn_entries[i].r_info);
 		Elf_Sym *dynsym_entries = &ptr->dynsym_start_addr[symbol_index];
 		const char *symbol_name = &ptr->dynstr_start_addr[dynsym_entries->st_name];
 		// printf(".rela.dyn: symbol_name = %s\n", symbol_name);
@@ -567,9 +584,9 @@ PUBLIC unsigned long get_got_plt_entry_offset(void *handle, const char *symbol) 
 	ElfInformation *ptr = (ElfInformation *)handle;
 	Elf_Rela *rela_plt_entries = ptr->rela_plt_start_addr;
 	for(Elf_Xword i = 0; i < ptr->rela_plt_section_num_entries; ++i) {
-		uint32_t type = ELF_R_TYPE(rela_plt_entries[i].r_info);
-		uint32_t symbol_index = ELF_R_SYM(rela_plt_entries[i].r_info);
-		Elf_Sym *dynsym_entries = &(ptr->dynsym_start_addr[symbol_index]);
+		uint32_t type = ELFW(R_TYPE)(rela_plt_entries[i].r_info);
+		uint32_t symbol_index = ELFW(R_SYM)(rela_plt_entries[i].r_info);
+		Elf_Sym *dynsym_entries = ptr->dynsym_start_addr + symbol_index;
 		const char *symbol_name = ptr->dynstr_start_addr + dynsym_entries->st_name;
 		// printf(".rela.plt: symbol_name = %p\n", symbol_name);
 		if(type == R_XPLATFORM_JUMP_SLOT && *symbol_name && strcmp(symbol_name, symbol) == 0) {
@@ -580,3 +597,17 @@ PUBLIC unsigned long get_got_plt_entry_offset(void *handle, const char *symbol) 
 	return 0;
 }
 
+PUBLIC int is_full_relro_enabled(void *handle) {
+    ElfInformation *ptr = (ElfInformation *)handle;
+    Elf_Dyn *dynsym = ptr->dynsym_start_addr;
+
+    for(int i = 0; i < ptr->dynsym_section_num_entries; ++i) {
+        if(dynsym[i].d_tag == DT_BIND_NOW ||
+        (dynsym[i].d_tag == DT_FLAGS && dynsym[i].d_un.d_val == DT_BIND_NOW) ||
+        (dynsym[i].d_tag == DT_FLAGS_1 && dynsym[i].d_un.d_val == DF_1_NOW)) {
+            return IS_FULL_RELRO;
+        }
+    }
+
+    return IS_NO_RELRO;
+}

@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 #include "libfoo.h"
 #include "elf_utils.h"
+#include "benchmark.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -8,19 +9,7 @@
 #include <dlfcn.h>
 #include <link.h>
 #include <stdlib.h>
-#include <time.h>
 
-#define START_BENCHMARK(start) \
-struct timespec start; \
-clock_gettime(CLOCK_MONOTONIC, &start)
-
-#define END_BENCHMARK(start, end, duration) \
-struct timespec end; \
-clock_gettime(CLOCK_MONOTONIC, &end); \
-long duration = ((end.tv_sec - start.tv_sec) * 1e9) + (end.tv_nsec - start.tv_nsec)
-
-#define PRINT_BENCHMARK(duration, label) \
-printf("[BENCHMARK] %s took %ld ns\n", label, duration)
 
 
 __attribute__((visibility("hidden")))
@@ -32,7 +21,7 @@ void call_external_function() {
 }
 
 unsigned long *get_section_address(void *handle, unsigned long elf_base_addr, const char *section) {
-	unsigned long *section_addr = elf_base_addr + get_section_offset(handle, section);
+	unsigned long *section_addr = elf_base_addr + get_section_memory_offset(handle, section);
 	printf("%s: %s range %p -> %p\n", get_elf_name(handle), section, section_addr, section_addr + get_section_size(handle, section));
 	return section_addr;
 }
@@ -55,9 +44,9 @@ void print_section_entries(void *handle, unsigned long *section_addr, const char
 
 void printf_symbol(void *handle, unsigned long elf_base_addr, const char *symbol) {
 	START_BENCHMARK(start);
-	unsigned long symbol_offset = get_symbol_offset(handle, symbol);
+	unsigned long symbol_offset = get_symbol_memory_offset(handle, symbol);
 	END_BENCHMARK(start, end, duration);
-PRINT_BENCHMARK(duration, "get_symbol_offset");
+	PRINT_BENCHMARK(duration, "get_symbol_memory_offset");
 	
 	if(symbol_offset) {
 		printf("%s: Symbol \'%s\' has offset = %p, absolute address = %p\n", get_elf_name(handle), symbol, symbol_offset, elf_base_addr + symbol_offset);
@@ -75,7 +64,7 @@ void inspect_elf(const char *elf) {
 		return;
 	}
 
-	unsigned long elf_base_addr = get_elf_base_address_on_memory(PID_SELF, elf);
+	unsigned long elf_base_addr = get_load_module_base_address(PID_SELF, elf);
 	// printf("%s: ELF has base address = %p\n", get_elf_name(handle), elf_base_addr);
 
 	// get_section_address(handle, elf_base_addr, ".text");
@@ -96,7 +85,7 @@ void inspect_elf(const char *elf) {
 	// printf_symbol(handle, elf_base_addr, "load_elf_to_memory");
 	// printf("\n========================================\n");
 
-	// unsigned long strcmp_offset = get_symbol_offset(handle, "foo");
+	// unsigned long strcmp_offset = get_symbol_memory_offset(handle, "foo");
 	// if(strcmp_offset > 0) {
 	// 	unsigned long strcmp_address = elf_base_addr + strcmp_offset;
 
@@ -130,8 +119,8 @@ void perform_got_hook(const char *main_elf, const char *libfoo_elf) {
 		printf("Failed to load elf file %s\n", libfoo_elf);
 		return;
 	}
-	unsigned long libfoo_elf_base_addr = get_elf_base_address_on_memory(PID_SELF, libfoo_elf);
-	unsigned long fake_foo_offset = get_symbol_offset(libfoo_elf_handle, "fake_foo");
+	unsigned long libfoo_elf_base_addr = get_load_module_base_address(PID_SELF, libfoo_elf);
+	unsigned long fake_foo_offset = get_symbol_memory_offset(libfoo_elf_handle, "fake_foo");
 	unsigned long fake_foo_abs_address = libfoo_elf_base_addr + fake_foo_offset;
 	printf("GOT Hook: fake_foo address = %p\n", fake_foo_abs_address);
 	unload_elf_from_memory(libfoo_elf_handle);
@@ -141,7 +130,7 @@ void perform_got_hook(const char *main_elf, const char *libfoo_elf) {
 		printf("Failed to load elf file %s\n", main_elf);
 		return;
 	}
-	unsigned long main_elf_base_addr = get_elf_base_address_on_memory(PID_SELF, main_elf);
+	unsigned long main_elf_base_addr = get_load_module_base_address(PID_SELF, main_elf);
 	unsigned long foo_got_plt_entry_offset = get_got_plt_entry_offset(main_elf_handle, "foo");
 	unsigned long *foo_got_plt_entry_abs_address = (unsigned long*)(main_elf_base_addr + foo_got_plt_entry_offset);
 	*foo_got_plt_entry_abs_address = fake_foo_abs_address;
@@ -162,19 +151,19 @@ int main() {
 	printf("pid = %d\n", getpid());
 	// iterate_phdr();
 
-	printf("\n========================================\n");
-	int x = foo(1, 2);
-	int y = fake_foo(1, 2);
-	printf("Before GOT Hook: x = foo(1, 2) = %d\n", x);
-	printf("Before GOT Hook: y = fake_foo(1, 2) = %d\n", y);
-	printf("\n========================================\n");
-	perform_got_hook("bin/main", "bin/liblibfoo.so");
-	printf("Perform GOT Hook successfully!\n");
-	printf("\n========================================\n");
-	x = foo(1, 2);
-	y = fake_foo(1, 2);
-	printf("After GOT Hook: x = foo(1, 2) = %d\n", x);
-	printf("After GOT Hook: y = fake_foo(1, 2) = %d\n", y);
+	// printf("\n========================================\n");
+	// int x = foo(1, 2);
+	// int y = fake_foo(1, 2);
+	// printf("Before GOT Hook: x = foo(1, 2) = %d\n", x);
+	// printf("Before GOT Hook: y = fake_foo(1, 2) = %d\n", y);
+	// printf("\n========================================\n");
+	// perform_got_hook("bin/main", "bin/liblibfoo.so");
+	// printf("Perform GOT Hook successfully!\n");
+	// printf("\n========================================\n");
+	// x = foo(1, 2);
+	// y = fake_foo(1, 2);
+	// printf("After GOT Hook: x = foo(1, 2) = %d\n", x);
+	// printf("After GOT Hook: y = fake_foo(1, 2) = %d\n", y);
 
 
 	getchar();
