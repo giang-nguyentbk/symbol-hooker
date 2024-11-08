@@ -65,16 +65,16 @@ void inspect_elf(const char *elf) {
 	}
 
 	unsigned long elf_base_addr = get_load_module_base_address(PID_SELF, elf);
-	// printf("%s: ELF has base address = %p\n", get_elf_name(handle), elf_base_addr);
+	printf("%s: ELF has base address = %p\n", get_elf_name(handle), elf_base_addr);
 
-	// get_section_address(handle, elf_base_addr, ".text");
-	// get_section_address(handle, elf_base_addr, ".plt");
+	get_section_address(handle, elf_base_addr, ".text");
+	get_section_address(handle, elf_base_addr, ".plt");
 
-	// unsigned long got_addr =  get_section_address(handle, elf_base_addr, ".got");
-	// print_section_entries(handle, got_addr, ".got");
+	unsigned long got_addr =  get_section_address(handle, elf_base_addr, ".got");
+	print_section_entries(handle, got_addr, ".got");
 
-	// unsigned long got_plt_addr =  get_section_address(handle, elf_base_addr, ".got.plt");
-	// print_section_entries(handle, got_plt_addr, ".got.plt");
+	unsigned long got_plt_addr =  get_section_address(handle, elf_base_addr, ".got.plt");
+	print_section_entries(handle, got_plt_addr, ".got.plt");
 
 	// inspect_dynamic_section(handle, elf_base_addr);
 
@@ -169,9 +169,9 @@ int main() {
 	getchar();
 	printf("\n========================================\n");
 	inspect_elf("bin/liblibfoo.so");
-	// getchar();
-	// printf("\n========================================\n");
-	// inspect_elf("bin/main");
+	getchar();
+	printf("\n========================================\n");
+	inspect_elf("bin/main");
 
 	// getchar();
 	// printf("\n========================================\n");

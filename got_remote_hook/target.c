@@ -13,19 +13,41 @@
 
 #define SYMBOL_GOT_HOOKING_DETECTED -1
 #define SYMBOL_GOT_HOOKING_NOT_DETECTED 0
-#define PRINT_GOT_PLT_ENTRIES	printf("\n========================================\n"); \
-								print_got_plt_entries("bin/target"); \
-								printf("========================================\n\n");
+#define PRINT_GOT_PLT_ENTRIES(elf)		printf("\n========================================\n"); \
+										print_got_plt_entries(elf); \
+										printf("========================================\n\n");
 
 typedef ElfW(Addr) (*DlFixupFuncPtr)(struct link_map *, ElfW(Word));
 
 #ifdef __arm64__
 #define scan_dl_runtime_resolve_text_segment(arg) scan_dl_runtime_resolve_text_segment_aarch64(arg)
+#elif defined __x86_64__
+#define scan_dl_runtime_resolve_text_segment(arg) scan_dl_runtime_resolve_text_segment_x86_64(arg)
 #else
 #define scan_dl_runtime_resolve_text_segment(arg) NULL
 #endif
 
 /* Symbol hooking detection */
+DlFixupFuncPtr scan_dl_runtime_resolve_text_segment_x86_64(unsigned long dl_runtime_resolve_addr) {
+	uint8_t *byte_code = (uint8_t *)dl_runtime_resolve_addr;
+	for(int i = 0; i < 300; ++i) {
+		if(byte_code[i] == (uint8_t)0xE8) {
+			int32_t *ptr = (int32_t *)(byte_code + i  + 1);
+			if(*ptr < 0) {
+				int32_t offset = *ptr;
+				void *pc = (void *)(byte_code + i  + 5); // sizeof call _dl_fixup instruction = 5 bytes -> PC = next instruction
+				unsigned long dl_fixup_addr = (unsigned long)(pc + offset);
+				if(dl_fixup_addr > 0) {
+					return (DlFixupFuncPtr)dl_fixup_addr;
+				}
+			}
+		}
+	}
+
+	printf("Failed to scan_dl_runtime_resolve_text_segment!\n");
+	return NULL;
+}
+
 DlFixupFuncPtr scan_dl_runtime_resolve_text_segment_aarch64(unsigned long dl_runtime_resolve_addr) {
 	uint32_t *byte_code = (uint32_t *)dl_runtime_resolve_addr;
 	for(int i = 0; i < 100; ++i) {
@@ -69,9 +91,13 @@ DlFixupFuncPtr find_dl_fixup() {
 					unsigned long *gotplt = (unsigned long *)(module_base_addr + gotplt_offset);
 					unsigned long dl_runtime_resolve_addr = gotplt[2];
 					if(dl_runtime_resolve_addr > 0) {
-						unload_elf_from_memory(handle);
-						fclose(f);
-						return scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
+						DlFixupFuncPtr dl_fixup_addr = scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
+						if(dl_fixup_addr > 0) {
+							printf("Found dynamic runtime resolver _dl_fixup = %p in ELF %s\n", dl_fixup_addr, path);
+							unload_elf_from_memory(handle);
+							fclose(f);
+							return dl_fixup_addr;
+						}
 					}
 				}
 			}
@@ -217,7 +243,7 @@ int main() {
 	printf("Before GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
 	printf("========================================\n\n");
 	
-	// PRINT_GOT_PLT_ENTRIES;
+	PRINT_GOT_PLT_ENTRIES("bin/liblibfoo.so");
 
 	printf("\n========================================\n");
 	printf("Waiting for GOT Hook from attacker...\n");
@@ -241,7 +267,7 @@ int main() {
 
 	printf("\n========================================\n");
 	START_BENCHMARK(start);
-	symbol_got_hooking_detection("bin/target", "foo");
+	symbol_got_hooking_detection("bin/liblibfoo.so", "free");
 	END_BENCHMARK(start, end, duration);
 	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection");
 	printf("========================================\n\n");
