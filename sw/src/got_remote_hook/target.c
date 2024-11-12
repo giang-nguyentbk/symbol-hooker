@@ -84,23 +84,26 @@ DlFixupFuncPtr find_dl_fixup() {
 		if(strchr(path, '/') != NULL && strcmp(prev_path, path) != 0) {
 			void *handle = load_elf_to_memory(path);
 			int relro = is_full_relro_enabled(handle);
-			if(relro == IS_NO_RELRO) {
-				// Try to retrieve _dl_runtime_resolve
-				unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
-				if(gotplt_offset > 0) {
-					unsigned long module_base_addr = s;
-					unsigned long *gotplt = (unsigned long *)(module_base_addr + gotplt_offset);
-					unsigned long dl_runtime_resolve_addr = gotplt[2];
-					if(dl_runtime_resolve_addr > 0) {
-						DlFixupFuncPtr dl_fixup_addr = scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
-						if(dl_fixup_addr > 0) {
-							// printf("Found dynamic runtime resolver _dl_fixup = %p in ELF %s\n", dl_fixup_addr, path);
-							unload_elf_from_memory(handle);
-							fclose(f);
-							return dl_fixup_addr;
-						}
-					}
-				}
+			if(relro == IS_FULL_RELRO) {
+				continue;
+			}
+			// Try to retrieve _dl_runtime_resolve
+			unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
+			if(gotplt_offset <= 0) {
+				continue;
+			}
+			unsigned long module_base_addr = s;
+			unsigned long *gotplt = (unsigned long *)(module_base_addr + gotplt_offset);
+			unsigned long dl_runtime_resolve_addr = gotplt[2];
+			if(dl_runtime_resolve_addr <= 0) {
+				continue;
+			}
+			DlFixupFuncPtr dl_fixup_addr = scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
+			if(dl_fixup_addr > 0) {
+				// printf("Found dynamic runtime resolver _dl_fixup = %p in ELF %s\n", dl_fixup_addr, path);
+				unload_elf_from_memory(handle);
+				fclose(f);
+				return dl_fixup_addr;
 			}
 			unload_elf_from_memory(handle);
 			strcpy(prev_path, path);
