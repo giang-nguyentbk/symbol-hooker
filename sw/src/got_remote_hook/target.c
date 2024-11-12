@@ -85,17 +85,23 @@ DlFixupFuncPtr find_dl_fixup() {
 			void *handle = load_elf_to_memory(path);
 			int relro = is_full_relro_enabled(handle);
 			if(relro == IS_FULL_RELRO) {
+				unload_elf_from_memory(handle);
+				strcpy(prev_path, path);
 				continue;
 			}
 			// Try to retrieve _dl_runtime_resolve
 			unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
 			if(gotplt_offset <= 0) {
+				unload_elf_from_memory(handle);
+				strcpy(prev_path, path);
 				continue;
 			}
 			unsigned long module_base_addr = s;
 			unsigned long *gotplt = (unsigned long *)(module_base_addr + gotplt_offset);
 			unsigned long dl_runtime_resolve_addr = gotplt[2];
 			if(dl_runtime_resolve_addr <= 0) {
+				unload_elf_from_memory(handle);
+				strcpy(prev_path, path);
 				continue;
 			}
 			DlFixupFuncPtr dl_fixup_addr = scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
