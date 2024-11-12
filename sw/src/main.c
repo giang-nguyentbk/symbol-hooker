@@ -49,9 +49,9 @@ void printf_symbol(void *handle, unsigned long elf_base_addr, const char *symbol
 	PRINT_BENCHMARK(duration, "get_symbol_memory_offset");
 	
 	if(symbol_offset) {
-		printf("%s: Symbol \'%s\' has offset = %p, absolute address = %p\n", get_elf_name(handle), symbol, symbol_offset, elf_base_addr + symbol_offset);
+		printf("%s: Symbol '%s' has offset = %p, absolute address = %p\n", get_elf_name(handle), symbol, symbol_offset, elf_base_addr + symbol_offset);
 	} else {
-		printf("%s: Does not have this symbol \'%s\'\n", get_elf_name(handle), symbol);
+		printf("%s: Does not have this symbol '%s'\n", get_elf_name(handle), symbol);
 	}
 }
 
@@ -106,9 +106,9 @@ void inspect_elf(const char *elf) {
 	// }
 
 	unsigned long foo_got_entry_offset = get_got_entry_offset(handle, "foo");
-	printf("GOT entry offset of symbol \'%s\' = %p, abs addr = %p\n", "foo", foo_got_entry_offset, elf_base_addr + foo_got_entry_offset);
+	printf("GOT entry offset of symbol '%s' = %p, abs addr = %p\n", "foo", foo_got_entry_offset, elf_base_addr + foo_got_entry_offset);
 	unsigned long foo_got_plt_entry_offset = get_got_plt_entry_offset(handle, "foo");
-	printf("GOT PLT entry offset of symbol \'%s\' = %p, abs addr = %p\n", "foo", foo_got_plt_entry_offset, elf_base_addr + foo_got_plt_entry_offset);
+	printf("GOT PLT entry offset of symbol '%s' = %p, abs addr = %p\n", "foo", foo_got_plt_entry_offset, elf_base_addr + foo_got_plt_entry_offset);
 
 	unload_elf_from_memory(handle);
 }
@@ -139,7 +139,7 @@ void perform_got_hook(const char *main_elf, const char *libfoo_elf) {
 }
 
 int callback(struct dl_phdr_info *info, size_t size, void *data) {
-	printf("Walking through shared library (NULL means main program): \'%s\'\n", info->dlpi_name);
+	printf("Walking through shared library (NULL means main program): '%s'\n", info->dlpi_name);
 	return 0;
 }
 

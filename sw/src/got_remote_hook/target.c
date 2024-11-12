@@ -1,7 +1,8 @@
 #define _GNU_SOURCE
-#include "../libfoo.h"
-#include "../elf_utils.h"
-#include "../benchmark.h"
+#include "libsdk.h"
+#include "libfake.h"
+#include "elf_utils.h"
+#include "benchmark.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -19,7 +20,7 @@
 
 typedef ElfW(Addr) (*DlFixupFuncPtr)(struct link_map *, ElfW(Word));
 
-#ifdef __arm64__
+#ifdef __aarch64__
 #define scan_dl_runtime_resolve_text_segment(arg) scan_dl_runtime_resolve_text_segment_aarch64(arg)
 #elif defined __x86_64__
 #define scan_dl_runtime_resolve_text_segment(arg) scan_dl_runtime_resolve_text_segment_x86_64(arg)
@@ -157,25 +158,25 @@ int symbol_got_hooking_detection(const char *target_elf, const char *symbol) {
 		void *handle = load_elf_to_memory(target_elf);
 		int relro = is_full_relro_enabled(handle);
 		if(relro) {
-			printf("This ELF \'%s\' has FULL RELRO enabled, no .got.plt section available!\n", target_elf);
+			printf("This ELF '%s' has FULL RELRO enabled, no .got.plt section available!\n", target_elf);
 			unload_elf_from_memory(handle);
 			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
 		}
 		unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
 		if(gotplt_offset == 0) {
-			printf("This ELF \'%s\' does not have .got.plt section!\n", target_elf);
+			printf("This ELF '%s' does not have .got.plt section!\n", target_elf);
 			unload_elf_from_memory(handle);
 			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
 		}
 		unsigned long gotplt_entry_offset = get_got_plt_entry_offset(handle, symbol);
 		if(gotplt_entry_offset == 0) {
-			printf("This ELF \'%s\' does not have symbol \'%s\' in .got.plt section!\n", target_elf, symbol);
+			printf("This ELF '%s' does not have symbol '%s' in .got.plt section!\n", target_elf, symbol);
 			unload_elf_from_memory(handle);
 			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
 		}
 		unsigned long module_base_addr = get_load_module_base_address(PID_SELF, target_elf);
 		if(module_base_addr == 0) {
-			printf("This ELF \'%s\' was not loaded into memory yet!\n", target_elf);
+			printf("This ELF '%s' was not loaded into memory yet!\n", target_elf);
 			unload_elf_from_memory(handle);
 			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
 		}
@@ -184,22 +185,22 @@ int symbol_got_hooking_detection(const char *target_elf, const char *symbol) {
 		unsigned long gotplt_entry_index = (gotplt_entry_offset - gotplt_offset) / sizeof(unsigned long);
 
 		/* Get .got.plt entry's index of symbol in target_elf -> calculate reloc_arg - the 2nd argument of _dl_fixup */
-		ElfW(Word) m_reloc_arg = (gotplt_entry_index - 2)*sizeof(unsigned long)*3 - sizeof(ElfW(Rela));
+		ElfW(Word) m_reloc_arg = (gotplt_entry_index - 2)*sizeof(unsigned long)*3 / sizeof(ElfW(Rela)) - 1;
 		unsigned long *gotplt_entry = (unsigned long *)(module_base_addr + gotplt_entry_offset);
 		unsigned long current_value_in_gotplt_entry = *gotplt_entry;
 		if(current_value_in_gotplt_entry >= plt_start && current_value_in_gotplt_entry < plt_end) {
-			printf("This symbol \'%s\' was not resolved yet in ELF %s!\n", symbol, target_elf);
+			printf("This symbol '%s' was not resolved yet in ELF %s!\n", symbol, target_elf);
 			unload_elf_from_memory(handle);
 			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
 		}
 		ElfW(Addr) resolved_symbol_addr = m_dl_fixup(m_link_map, m_reloc_arg);
 		if(resolved_symbol_addr > 0) {
 			if(current_value_in_gotplt_entry != (unsigned long)resolved_symbol_addr) {
-				printf("GOT HOOK DETECTED: on entry %d: ELF = \'%s\', symbol = \'%s\', resolved value = %p, hooked value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
+				printf("GOT hook detected on entry %d: ELF = '%s', symbol = '%s', resolved value = %p, hooked value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
 				unload_elf_from_memory(handle);
 				return SYMBOL_GOT_HOOKING_DETECTED;
 			} else {
-				printf("Resolved symbol on entry %d: ELF \'%s\', symbol = \'%s\', resolved value = %p, old value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
+				printf("Resolved symbol on entry %d: ELF '%s', symbol = '%s', resolved value = %p, old value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
 			}
 		}
 
@@ -232,45 +233,79 @@ unsigned long *get_GLOBAL_SYMBOL_IN_TARGET() {
 	return &GLOBAL_SYMBOL_IN_TARGET;
 }
 
+/* Simple GOT hooking detection */
+int symbol_got_hooking_detection_simple(const char *target_elf_want_to_check,
+							const char *library_where_symbol_is_exported, const char *symbol) {
+	void *target_handle = load_elf_to_memory(target_elf_want_to_check);
+	void *library_handle = load_elf_to_memory(library_where_symbol_is_exported);
+	
+	unsigned long target_module_base = get_load_module_base_address(PID_SELF, target_elf_want_to_check);
+	unsigned long gotplt_entry_offset = get_got_plt_entry_offset(target_handle, symbol);
+	if(gotplt_entry_offset == 0) {
+		printf("This ELF '%s' does not have symbol '%s' in .got.plt section!\n", target_elf_want_to_check, symbol);
+		unload_elf_from_memory(target_handle);
+		return SYMBOL_GOT_HOOKING_NOT_DETECTED;
+	}
+	unsigned long *gotplt = (unsigned long *)(target_module_base + gotplt_entry_offset);
+	
+	unsigned long library_module_base = get_load_module_base_address(PID_SELF, library_where_symbol_is_exported);
+	unsigned long library_text_start = library_module_base + get_section_memory_offset(library_handle, ".text");
+	unsigned long library_text_end = library_text_start + get_section_size(library_handle, ".text");
 
+	if(*gotplt < library_text_start || *gotplt >= library_text_end) {
+		printf("GOT hook detected: symbol '%s' in '%s' .got.plt should come from library '%s' but it doesn't!!!\n", symbol, target_elf_want_to_check, library_where_symbol_is_exported);
+		return SYMBOL_GOT_HOOKING_DETECTED;
+	}
+
+	unload_elf_from_memory(target_handle);
+	unload_elf_from_memory(library_handle);
+	return SYMBOL_GOT_HOOKING_NOT_DETECTED;
+}
 
 int main() {
 	printf("\n========================================\n");
-	int x = foo(1, 2);
+	int x = use_foo(1, 2);
 	int y = fake_foo(1, 2);
 	printf("Before GOT Hook: x = foo(1, 2) = %d\n", x);
 	printf("Before GOT Hook: y = fake_foo(1, 2) = %d\n", y);
-	printf("Before GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
-	printf("========================================\n\n");
+	printf("Before GOT Hook: GLOBAL_SYMBOL_IN_LIBFOO = %lu\n", use_libfoo_global_var());
+	// printf("Before GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
+	printf("========================================\n");
 	
-	PRINT_GOT_PLT_ENTRIES("bin/liblibfoo.so");
+	PRINT_GOT_PLT_ENTRIES("bin/liblibsdk.so");
 
 	printf("\n========================================\n");
 	printf("Waiting for GOT Hook from attacker...\n");
-	printf("========================================\n\n");
+	printf("========================================\n");
 	getchar();
 	
 	printf("\n========================================\n");
-	x = foo(1, 2);
+	x = use_foo(1, 2);
 	y = fake_foo(1, 2);
 	printf("After GOT Hook: x = foo(1, 2) = %d\n", x);
 	printf("After GOT Hook: y = fake_foo(1, 2) = %d\n", y);
-	printf("After GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
-	printf("========================================\n\n");
+	printf("After GOT Hook: GLOBAL_SYMBOL_IN_LIBFOO = %lu\n", use_libfoo_global_var());
+	// printf("After GOT Hook: GLOBAL_SYMBOL_IN_TARGET = %lu\n", *get_GLOBAL_SYMBOL_IN_TARGET());
+	printf("========================================\n");
 
-	// PRINT_GOT_PLT_ENTRIES;
+	PRINT_GOT_PLT_ENTRIES("bin/liblibsdk.so");
 
 	printf("\n========================================\n");
 	printf("Running GOT Hook detection...\n");
-	printf("========================================\n\n");
+	printf("========================================\n");
 	getchar();
 
 	printf("\n========================================\n");
+	int is_hooked = SYMBOL_GOT_HOOKING_NOT_DETECTED;
 	START_BENCHMARK(start);
-	symbol_got_hooking_detection("bin/liblibfoo.so", "free");
+	// is_hooked = symbol_got_hooking_detection("bin/liblibsdk.so", "foo");
+	is_hooked = symbol_got_hooking_detection_simple("bin/liblibsdk.so", "bin/liblibfoo.so", "foo");
 	END_BENCHMARK(start, end, duration);
 	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection");
-	printf("========================================\n\n");
+	if(is_hooked == SYMBOL_GOT_HOOKING_DETECTED) {
+		printf("GOT HOOK DETECTED!!!\n");
+	}
+	printf("========================================\n");
 
 	return 0;
 }

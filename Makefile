@@ -1,4 +1,10 @@
-BIN = ./bin
+ROOT_DIR := $(shell git rev-parse --show-toplevel)
+SW_DIR := $(ROOT_DIR)/sw
+BIN_DIR := $(ROOT_DIR)/bin
+SRC_DIR := $(SW_DIR)/src
+GOTHOOK_DIR := $(SRC_DIR)/got_remote_hook
+UTILS_DIR := $(SW_DIR)/utils
+LIBRARIES_DIR := $(SW_DIR)/libraries
 
 # RELRO_FLAGS = -Wl,-z,relro,-z,now
 # RELRO_FLAGS = -Wl,-z,relro
@@ -10,63 +16,79 @@ WARNING_FLAGS = -w
 # STACK_PROTECTION = -z execstack
 # STACK_PROTECTION = -z noexecstack
 
-CCFLAGS = $(OPTIMIZED_FLAGS) $(WARNING_FLAGS) $(RELRO_FLAGS) $(NO_STRIPPING_SYMBOLS) $(DEBUG_INFO) $(STACK_PROTECTION)
+INCLUDE_PATH 	:= \
+				-I$(LIBRARIES_DIR) \
+				-I$(UTILS_DIR)
+CCFLAGS = $(OPTIMIZED_FLAGS) $(WARNING_FLAGS) $(RELRO_FLAGS) $(NO_STRIPPING_SYMBOLS) $(DEBUG_INFO) $(STACK_PROTECTION) $(INCLUDE_PATH)
 
-all: create_bin libfoo main targetexe got_hooker relro_mode
+all: requires create_bin libfoo libfake libsdk main targetexe got_hooker relro_mode
+
+requires:
+	@echo "WARNING: Please run this first if not yet: >> export LD_LIBRARY_PATH=./bin:$LD_LIBRARY_PATH"
 
 create_bin:
-	@mkdir -p $(BIN)
+	@mkdir -p $(BIN_DIR)
 
-libfoo: $(BIN)/libfoo.o
-	gcc -shared $(CCFLAGS) $^ -o $(BIN)/liblibfoo.so
+libfoo: $(BIN_DIR)/libfoo.o
+	@echo "    CC \t $(BIN_DIR)/liblibfoo.so"
+	@gcc -shared $(CCFLAGS) $^ -o $(BIN_DIR)/liblibfoo.so
 
-$(BIN)/libfoo.o: libfoo.c
-	gcc libfoo.c -c $(CCFLAGS) -fPIC -o $@
+$(BIN_DIR)/libfoo.o: $(LIBRARIES_DIR)/libfoo.c
+	@echo "    CC \t $@"
+	@gcc $^ -c $(CCFLAGS) -fPIC -o $@
 
-$(BIN)/elf_utils.o:
-	gcc -c elf_utils.c $(CCFLAGS) -o $@
+libfake: $(BIN_DIR)/libfake.o
+	@echo "    CC \t $(BIN_DIR)/liblibfake.so"
+	@gcc -shared $(CCFLAGS) $^ -o $(BIN_DIR)/liblibfake.so
 
-$(BIN)/ptrace_wrapper.o:
-	gcc -c ptrace_wrapper.c $(CCFLAGS) -o $@
+$(BIN_DIR)/libfake.o: $(LIBRARIES_DIR)/libfake.c
+	@echo "    CC \t $@"
+	@gcc $^ -c $(CCFLAGS) -fPIC -o $@
 
-main: main.c $(BIN)/elf_utils.o
-	gcc $^ $(CCFLAGS) -L$(BIN) -llibfoo -o $(BIN)/main
+libsdk: $(BIN_DIR)/libsdk.o
+	@echo "    CC \t $(BIN_DIR)/liblibsdk.so"
+	@gcc -shared $(CCFLAGS) $^ -L$(BIN_DIR) -llibfoo -o $(BIN_DIR)/liblibsdk.so
 
-targetexe: got_remote_hook/target.c $(BIN)/elf_utils.o
-	gcc $^ $(CCFLAGS) -L$(BIN) -llibfoo -o $(BIN)/target
+$(BIN_DIR)/libsdk.o: $(LIBRARIES_DIR)/libsdk.c
+	@echo "    CC \t $@"
+	@gcc $^ -c $(CCFLAGS) -fPIC -o $@
 
-got_hooker: got_remote_hook/got_hooker.c $(BIN)/elf_utils.o $(BIN)/ptrace_wrapper.o
-	gcc $^ $(CCFLAGS) -o $(BIN)/got_hooker
+$(BIN_DIR)/elf_utils.o: $(UTILS_DIR)/elf_utils.c
+	@echo "    CC \t $@"
+	@gcc -c $^ $(CCFLAGS) -o $@
+
+$(BIN_DIR)/ptrace_wrapper.o: $(UTILS_DIR)/ptrace_wrapper.c
+	@echo "    CC \t $@"
+	@gcc -c $^ $(CCFLAGS) -o $@
+
+main: $(SRC_DIR)/main.c $(BIN_DIR)/elf_utils.o
+	@echo "    CC \t $(BIN_DIR)/main"
+	@gcc $^ $(CCFLAGS) -L$(BIN_DIR) -llibfoo -o $(BIN_DIR)/main
+
+targetexe: $(GOTHOOK_DIR)/target.c $(BIN_DIR)/elf_utils.o
+	@echo "    CC \t $(BIN_DIR)/target"
+	@gcc $^ $(CCFLAGS) -L$(BIN_DIR) -llibsdk -L$(BIN_DIR) -llibfake -o $(BIN_DIR)/target
+
+got_hooker: $(GOTHOOK_DIR)/got_hooker.c $(BIN_DIR)/elf_utils.o $(BIN_DIR)/ptrace_wrapper.o
+	@echo "    CC \t $(BIN_DIR)/got_hooker"
+	@gcc $^ $(CCFLAGS) -o $(BIN_DIR)/got_hooker
 
 run:
-	@echo "Please run this first if not yet: >> export LD_LIBRARY_PATH=./bin:$LD_LIBRARY_PATH"
-	@$(BIN)/main
+	@$(BIN_DIR)/main
 
 target:
-	@$(BIN)/target
+	@$(BIN_DIR)/target
 
 got:
-	@$(BIN)/got_hooker
+	@$(BIN_DIR)/got_hooker
 
-relro_mode: relro_mode.c $(BIN)/elf_utils.o
-	gcc $^ $(CCFLAGS) -o $(BIN)/relro_mode
+relro_mode: $(SRC_DIR)/relro_mode.c $(BIN_DIR)/elf_utils.o
+	@echo "    CC \t $(BIN_DIR)/relro_mode"
+	@gcc $^ $(CCFLAGS) -o $(BIN_DIR)/relro_mode
 
 rr:
-	@$(BIN)/relro_mode
-
-# $(BIN)/libfoo_static.o: libfoo.c
-# 	gcc libfoo.c -c $(CCFLAGS) -o $@
-
-# libfoo_static: $(BIN)/libfoo_static.o
-# 	ar -rcs $(BIN)/liblibfoo_static.a $^
-
-# main_static: libfoo_static $(BIN)/elf_utils.o
-# 	gcc main.c $(BIN)/elf_utils.o $(CCFLAGS) -L$(BIN) -llibfoo_static -o $(BIN)/main_static
-
-# runs:
-# 	@$(BIN)/main_static
-
-# static: create_bin libfoo_static main_static
+	@$(BIN_DIR)/relro_mode
 
 clean:
-	rm -rf $(BIN)
+	@echo "    RM \t $(BIN_DIR)"
+	@rm -rf $(BIN_DIR)

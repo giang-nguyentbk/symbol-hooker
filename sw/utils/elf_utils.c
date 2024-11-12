@@ -159,7 +159,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 		Elf_Half symbol_type = ELFW(ST_TYPE)(symtab_entries[i].st_info);
 		if(symtab_entries[i].st_name != 0 && symtab_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && symtab_entries[i].st_size)) {
 			char *symbol_name = strtab_ptr + symtab_entries[i].st_name;
-			// printf("Symbol: .symtab %d: \'%s\'\n", i, symbol_name);
+			// printf("Symbol: .symtab %d: '%s'\n", i, symbol_name);
 			strcpy(handle->symbol_table[handle->symbol_table_size].name, symbol_name);
 			handle->symbol_table[handle->symbol_table_size].offset = symtab_entries[i].st_value;
 			handle->symbol_table[handle->symbol_table_size].type = symbol_type;
@@ -171,7 +171,7 @@ PRIVATE void save_symbol_information_private(ElfInformation *handle) {
 		Elf_Half symbol_type = ELFW(ST_TYPE)(dynsym_entries[i].st_info);
 		if(dynsym_entries[i].st_name != 0 && dynsym_entries[i].st_value && (symbol_type == STT_FUNC || symbol_type == STT_OBJECT && dynsym_entries[i].st_size)) {
 			char *symbol_name = dynstr_ptr + dynsym_entries[i].st_name;
-			// printf("Symbol: .dynsym %d: \'%s\'\n", i, symbol_name);
+			// printf("Symbol: .dynsym %d: '%s'\n", i, symbol_name);
 			strcpy(handle->symbol_table[handle->symbol_table_size].name, symbol_name);
 			handle->symbol_table[handle->symbol_table_size].offset = dynsym_entries[i].st_value;
 			handle->symbol_table[handle->symbol_table_size].type = symbol_type;

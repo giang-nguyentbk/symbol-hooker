@@ -8,14 +8,9 @@ int foo(int a, int b) {
 	ptr = malloc(10);
 	int c = a ^ b * 1000;
 	free(ptr);
-	return GLOBAL_SYMBOL_IN_LIBFOO;
+	return 999;
 }
 
-int fake_foo(int a, int b) {
-	printf("libfoo: GLOBAL_SYMBOL_IN_LIBFOO = %lu\n", GLOBAL_SYMBOL_IN_LIBFOO);
-	void *ptr = &calloc;
-	ptr = calloc(10, 1);
-	int c = a ^ b * 9999;
-	free(ptr);
+int get_global_var() {
 	return GLOBAL_SYMBOL_IN_LIBFOO;
 }

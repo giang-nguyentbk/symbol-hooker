@@ -3,6 +3,6 @@
 
 int foo(int a, int b);
 
-int fake_foo(int a, int b);
+int get_global_var();
 
 #endif
