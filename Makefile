@@ -1,4 +1,4 @@
-ROOT_DIR := $(shell git rev-parse --show-toplevel)
+ROOT_DIR := /home/giangnguyentbk/workspace/symbol-hooker
 SW_DIR := $(ROOT_DIR)/sw
 BIN_DIR := $(ROOT_DIR)/bin
 SRC_DIR := $(SW_DIR)/src
@@ -24,7 +24,7 @@ CCFLAGS = $(OPTIMIZED_FLAGS) $(WARNING_FLAGS) $(RELRO_FLAGS) $(NO_STRIPPING_SYMB
 all: requires create_bin libfoo libfake libsdk main targetexe got_hooker relro_mode
 
 requires:
-	@echo "WARNING: Please run this first if not yet: >> export LD_LIBRARY_PATH=./bin:$LD_LIBRARY_PATH"
+	@echo "WARNING: Please run this first if not yet: >> export LD_LIBRARY_PATH=$(BIN_DIR):$(LD_LIBRARY_PATH)"
 
 create_bin:
 	@mkdir -p $(BIN_DIR)

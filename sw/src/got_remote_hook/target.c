@@ -94,7 +94,7 @@ DlFixupFuncPtr find_dl_fixup() {
 					if(dl_runtime_resolve_addr > 0) {
 						DlFixupFuncPtr dl_fixup_addr = scan_dl_runtime_resolve_text_segment(dl_runtime_resolve_addr);
 						if(dl_fixup_addr > 0) {
-							printf("Found dynamic runtime resolver _dl_fixup = %p in ELF %s\n", dl_fixup_addr, path);
+							// printf("Found dynamic runtime resolver _dl_fixup = %p in ELF %s\n", dl_fixup_addr, path);
 							unload_elf_from_memory(handle);
 							fclose(f);
 							return dl_fixup_addr;
@@ -141,70 +141,76 @@ struct link_map *find_link_map(const char *target_elf, const char *symbol) {
 	return NULL;
 }
 
+ElfW(Sxword) find_reloc_index(const char *target_elf, const char *symbol, unsigned long *current_gotplt_entry_value, unsigned long *gotplt_entry_index) {
+	void *handle = load_elf_to_memory(target_elf);
+	int relro = is_full_relro_enabled(handle);
+	if(relro) {
+		printf("This ELF '%s' has FULL RELRO enabled, no .got.plt section available!\n", target_elf);
+		unload_elf_from_memory(handle);
+		return -1;
+	}
+	unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
+	if(gotplt_offset == 0) {
+		printf("This ELF '%s' does not have .got.plt section!\n", target_elf);
+		unload_elf_from_memory(handle);
+		return -1;
+	}
+	unsigned long gotplt_entry_offset = get_got_plt_entry_offset(handle, symbol);
+	if(gotplt_entry_offset == 0) {
+		printf("This ELF '%s' does not have symbol '%s' in .got.plt section!\n", target_elf, symbol);
+		unload_elf_from_memory(handle);
+		return -1;
+	}
+	unsigned long module_base_addr = get_load_module_base_address(PID_SELF, target_elf);
+	if(module_base_addr == 0) {
+		printf("This ELF '%s' was not loaded into memory yet!\n", target_elf);
+		unload_elf_from_memory(handle);
+		return -1;
+	}
+	unsigned long plt_start = module_base_addr + get_section_memory_offset(handle, ".plt");
+	unsigned long plt_end = plt_start + get_section_size(handle, ".plt");
+	unsigned long *gotplt_entry = (unsigned long *)(module_base_addr + gotplt_entry_offset);
+	*current_gotplt_entry_value = *gotplt_entry;
+	if(*current_gotplt_entry_value >= plt_start && *current_gotplt_entry_value < plt_end) {
+		printf("This symbol '%s' was not resolved yet in ELF %s!\n", symbol, target_elf);
+		unload_elf_from_memory(handle);
+		return -1;
+	}
+	
+	/* Get .got.plt entry's index of symbol in target_elf -> calculate reloc_arg - the 2nd argument of _dl_fixup */
+	*gotplt_entry_index = (gotplt_entry_offset - gotplt_offset) / sizeof(unsigned long);
+	ElfW(Sxword) reloc_index = (ElfW(Sxword))((*gotplt_entry_index - 2)*sizeof(unsigned long)*3 / sizeof(ElfW(Rela)) - 1);
+#ifdef __aarch64__
+	reloc_index *= sizeof(ElfW(Rela)); // aarch64 uses byte indexing instead of ElfW(Rela)-size indexing like x86_64
+#endif
+
+	unload_elf_from_memory(handle);
+	return reloc_index;
+}
+
 int symbol_got_hooking_detection(const char *target_elf, const char *symbol) {
 	/* Find _dl_fixup address, run only once if possibly found */
-	static DlFixupFuncPtr m_dl_fixup = NULL;
-	if(m_dl_fixup == NULL) {
-		m_dl_fixup = find_dl_fixup();
+	static DlFixupFuncPtr dl_fixup = NULL;
+	if(dl_fixup == NULL) {
+		dl_fixup = find_dl_fixup();
 	}
 
 	/* Based on target_elf, traverse /proc/pid/maps to retrieve link_map */
-	struct link_map *m_link_map = find_link_map(target_elf, symbol);
-	if(m_link_map == NULL) {
-		return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-	}
+	unsigned long current_gotplt_entry_value = 0;
+	unsigned long gotplt_entry_index = 0;
+	struct link_map *lm = find_link_map(target_elf, symbol);
+	ElfW(Sxword) reloc_index = find_reloc_index(target_elf, symbol, &current_gotplt_entry_value, &gotplt_entry_index);
 
-	if(m_dl_fixup) {
-		void *handle = load_elf_to_memory(target_elf);
-		int relro = is_full_relro_enabled(handle);
-		if(relro) {
-			printf("This ELF '%s' has FULL RELRO enabled, no .got.plt section available!\n", target_elf);
-			unload_elf_from_memory(handle);
-			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-		}
-		unsigned long gotplt_offset = get_section_memory_offset(handle, ".got.plt");
-		if(gotplt_offset == 0) {
-			printf("This ELF '%s' does not have .got.plt section!\n", target_elf);
-			unload_elf_from_memory(handle);
-			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-		}
-		unsigned long gotplt_entry_offset = get_got_plt_entry_offset(handle, symbol);
-		if(gotplt_entry_offset == 0) {
-			printf("This ELF '%s' does not have symbol '%s' in .got.plt section!\n", target_elf, symbol);
-			unload_elf_from_memory(handle);
-			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-		}
-		unsigned long module_base_addr = get_load_module_base_address(PID_SELF, target_elf);
-		if(module_base_addr == 0) {
-			printf("This ELF '%s' was not loaded into memory yet!\n", target_elf);
-			unload_elf_from_memory(handle);
-			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-		}
-		unsigned long plt_start = module_base_addr + get_section_memory_offset(handle, ".plt");
-		unsigned long plt_end = plt_start + get_section_size(handle, ".plt");
-		unsigned long gotplt_entry_index = (gotplt_entry_offset - gotplt_offset) / sizeof(unsigned long);
-
-		/* Get .got.plt entry's index of symbol in target_elf -> calculate reloc_arg - the 2nd argument of _dl_fixup */
-		ElfW(Word) m_reloc_arg = (gotplt_entry_index - 2)*sizeof(unsigned long)*3 / sizeof(ElfW(Rela)) - 1;
-		unsigned long *gotplt_entry = (unsigned long *)(module_base_addr + gotplt_entry_offset);
-		unsigned long current_value_in_gotplt_entry = *gotplt_entry;
-		if(current_value_in_gotplt_entry >= plt_start && current_value_in_gotplt_entry < plt_end) {
-			printf("This symbol '%s' was not resolved yet in ELF %s!\n", symbol, target_elf);
-			unload_elf_from_memory(handle);
-			return SYMBOL_GOT_HOOKING_NOT_DETECTED;
-		}
-		ElfW(Addr) resolved_symbol_addr = m_dl_fixup(m_link_map, m_reloc_arg);
+	if(dl_fixup && lm && reloc_index >= 0) {
+		ElfW(Addr) resolved_symbol_addr = dl_fixup(lm, (ElfW(Word))reloc_index);
 		if(resolved_symbol_addr > 0) {
-			if(current_value_in_gotplt_entry != (unsigned long)resolved_symbol_addr) {
-				printf("GOT hook detected on entry %d: ELF = '%s', symbol = '%s', resolved value = %p, hooked value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
-				unload_elf_from_memory(handle);
+			if(current_gotplt_entry_value != (unsigned long)resolved_symbol_addr) {
+				printf("GOT hook detected on entry %d: ELF = '%s', symbol = '%s', resolved value = %p, hooked value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_gotplt_entry_value);
 				return SYMBOL_GOT_HOOKING_DETECTED;
 			} else {
-				printf("Resolved symbol on entry %d: ELF '%s', symbol = '%s', resolved value = %p, old value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_value_in_gotplt_entry);
+				printf("Resolved symbol on entry %d: ELF '%s', symbol = '%s', resolved value = %p, old value = %p\n", gotplt_entry_index, target_elf, symbol, resolved_symbol_addr, current_gotplt_entry_value);
 			}
 		}
-
-		unload_elf_from_memory(handle);
 	}
 
 	return SYMBOL_GOT_HOOKING_NOT_DETECTED;
@@ -297,15 +303,22 @@ int main() {
 
 	printf("\n========================================\n");
 	int is_hooked = SYMBOL_GOT_HOOKING_NOT_DETECTED;
-	START_BENCHMARK(start);
-	// is_hooked = symbol_got_hooking_detection("bin/liblibsdk.so", "foo");
+	START_BENCHMARK(start1);
 	is_hooked = symbol_got_hooking_detection_simple("bin/liblibsdk.so", "bin/liblibfoo.so", "foo");
-	END_BENCHMARK(start, end, duration);
-	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection");
+	END_BENCHMARK(start1, end1, duration1);
+	PRINT_BENCHMARK(duration1, "symbol_got_hooking_detection_simple");
 	if(is_hooked == SYMBOL_GOT_HOOKING_DETECTED) {
-		printf("GOT HOOK DETECTED!!!\n");
+		printf("symbol_got_hooking_detection_simple: GOT HOOK DETECTED!!!\n");
 	}
 	printf("========================================\n");
+	START_BENCHMARK(start2);
+	is_hooked = symbol_got_hooking_detection("bin/liblibsdk.so", "foo");
+	END_BENCHMARK(start2, end2, duration2);
+	PRINT_BENCHMARK(duration2, "symbol_got_hooking_detection");
+	if(is_hooked == SYMBOL_GOT_HOOKING_DETECTED) {
+		printf("symbol_got_hooking_detection: GOT HOOK DETECTED!!!\n");
+	}
+	printf("========================================\n\n");
 
 	return 0;
 }

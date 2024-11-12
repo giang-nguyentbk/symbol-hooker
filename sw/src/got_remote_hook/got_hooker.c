@@ -103,7 +103,7 @@ int main() {
 
 	printf("\n========================================\n");
 	perform_got_hook(pid, "bin/liblibsdk.so", "bin/liblibfoo.so", "bin/liblibfake.so");
-	printf("========================================\n");
+	printf("========================================\n\n");
 
 	return 0;
 }
