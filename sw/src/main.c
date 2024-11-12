@@ -43,6 +43,7 @@ void print_section_entries(void *handle, unsigned long *section_addr, const char
 }
 
 void printf_symbol(void *handle, unsigned long elf_base_addr, const char *symbol) {
+	INIT_BENCHMARK(start, end, duration);
 	START_BENCHMARK(start);
 	unsigned long symbol_offset = get_symbol_memory_offset(handle, symbol);
 	END_BENCHMARK(start, end, duration);

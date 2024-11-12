@@ -311,19 +311,20 @@ int main() {
 	getchar();
 
 	printf("\n========================================\n");
+	INIT_BENCHMARK(start, end, duration);
 	int is_hooked = SYMBOL_GOT_HOOKING_NOT_DETECTED;
-	START_BENCHMARK(start1);
+	START_BENCHMARK(start);
 	is_hooked = symbol_got_hooking_detection_simple("bin/liblibsdk.so", "bin/liblibfoo.so", "foo");
-	END_BENCHMARK(start1, end1, duration1);
-	PRINT_BENCHMARK(duration1, "symbol_got_hooking_detection_simple");
+	END_BENCHMARK(start, end, duration);
+	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection_simple");
 	if(is_hooked == SYMBOL_GOT_HOOKING_DETECTED) {
 		printf("symbol_got_hooking_detection_simple: GOT HOOK DETECTED!!!\n");
 	}
 	printf("========================================\n");
-	START_BENCHMARK(start2);
+	START_BENCHMARK(start);
 	is_hooked = symbol_got_hooking_detection("bin/liblibsdk.so", "foo");
-	END_BENCHMARK(start2, end2, duration2);
-	PRINT_BENCHMARK(duration2, "symbol_got_hooking_detection");
+	END_BENCHMARK(start, end, duration);
+	PRINT_BENCHMARK(duration, "symbol_got_hooking_detection");
 	if(is_hooked == SYMBOL_GOT_HOOKING_DETECTED) {
 		printf("symbol_got_hooking_detection: GOT HOOK DETECTED!!!\n");
 	}
